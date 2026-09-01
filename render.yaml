@@ -11,6 +11,8 @@ services:
         value: https://www.catchcorner.com/facility-page/embedded/rental/canlan-sports-oakville
       - key: PRICE_THRESHOLD
         value: "150"
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"    # installs Chromium inside node_modules so it survives into the runtime container
       - key: EARLIEST_HOUR
         value: "7"
       - key: LATEST_HOUR
