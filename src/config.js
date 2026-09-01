@@ -4,6 +4,7 @@ export const config = {
   priceThreshold: Number(process.env.PRICE_THRESHOLD || 150),
   earliestHour: Number(process.env.EARLIEST_HOUR ?? 7), // 24h clock; slots starting before this are skipped
   latestHour: Number(process.env.LATEST_HOUR ?? 19), // 24h clock; slots starting at/after this are skipped
+  checkSecret: process.env.CHECK_SECRET || null, // required as ?key= on /check if set
   emailTo: process.env.EMAIL_TO,
   emailFrom: process.env.EMAIL_FROM,
   resendApiKey: process.env.RESEND_API_KEY,

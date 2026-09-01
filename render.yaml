@@ -1,22 +1,28 @@
 services:
-  - type: cron
+  - type: web
     name: canlan-ice-tracker
     runtime: node
     plan: starter
-    schedule: "*/15 * * * *"   # every 15 min; tighten/loosen as you like
+    healthCheckPath: /
     buildCommand: "npm install && npx playwright install --with-deps chromium"
     startCommand: "npm start"
     envVars:
       - key: CATCHCORNER_URL
         value: https://www.catchcorner.com/facility-page/embedded/rental/canlan-sports-oakville
       - key: PRICE_THRESHOLD
-        value: "150"          # alert when a slot's total price is <= this
+        value: "150"
+      - key: EARLIEST_HOUR
+        value: "7"
+      - key: LATEST_HOUR
+        value: "19"
       - key: EMAIL_TO
         sync: false            # set in Render dashboard
       - key: EMAIL_FROM
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      - key: CHECK_SECRET
+        sync: false            # pick any random string; required as ?key= to trigger /check
       - key: REDIS_URL
         fromService:
           name: canlan-ice-tracker-kv

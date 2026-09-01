@@ -4,7 +4,8 @@
   "description": "Watches CatchCorner's Canlan Sports Oakville rental page for cheap ice slots and emails alerts.",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/server.js",
+    "check:once": "node src/index.js",
     "debug:capture": "node debug/inspect.js"
   },
   "dependencies": {
