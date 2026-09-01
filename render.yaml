@@ -1,18 +1,9 @@
-echo "fastapi
-uvicorn
-httpx
-gunicorn" > requirements.txt
-
-echo "services:
+services:
   - type: web
     name: canlan-ice-tracker
     env: python
-    buildCommand: 'pip install -r requirements.txt'
-    startCommand: 'gunicorn main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:\$PORT'
+    buildCommand: "pip install -r requirements.txt && playwright install chromium"
+    startCommand: "gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0" > render.yaml
-
-git add requirements.txt render.yaml
-git commit -m "Remove playwright from build config"
-git push origin main
+        value: 3.11.0

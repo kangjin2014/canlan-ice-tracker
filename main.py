@@ -1,42 +1,56 @@
-import httpx
-from datetime import datetime, timedelta
+import json
 from fastapi import FastAPI
+from playwright.async_api import async_playwright
 
-app = FastAPI()
+app = FastAPI(title="CatchCorner API Interceptor")
 
 @app.get("/")
 def read_root():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "Canlan Oakville Ice Tracker"}
 
 @app.get("/api/v1/ice/last-minute")
-async def get_last_minute_ice(days_ahead: int = 3):
-    start = datetime.now().strftime("%Y-%m-%d")
-    end = (datetime.now() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
-    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-    
-    patterns = [
-        {"method": "POST", "url": "https://www.catchcorner.com/api/client/listing/search", "json": {"sportId": 1, "facilitySeoName": "canlansportsoakville", "startDate": start, "endDate": end}, "params": None},
-        {"method": "POST", "url": "https://www.catchcorner.com/api/client/listing/search", "json": {"sportId": 1, "facilitySeoName": "canlan-sports-oakville", "startDate": start, "endDate": end}, "params": None},
-        {"method": "GET", "url": "https://www.catchcorner.com/api/client/facility/rental/canlansportsoakville", "json": None, "params": {"sportId": 1, "startDate": start, "endDate": end}},
-        {"method": "GET", "url": "https://www.catchcorner.com/api/client/facility/rental/canlan-sports-oakville", "json": None, "params": {"sportId": 1, "startDate": start, "endDate": end}},
-        {"method": "GET", "url": "https://www.catchcorner.com/api/client/facility/rental/canlan-sports-oakville-entripy-centre", "json": None, "params": {"sportId": 1}}
-    ]
+async def get_last_minute_ice():
+    target_url = "https://www.catchcorner.com/facility-page/embedded/rental/canlan-sports-oakville"
+    captured_data = None
+    captured_api_url = None
 
-    errors = []
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-        for p in patterns:
-            try:
-                if p["method"] == "POST":
-                    resp = await client.post(p["url"], json=p["json"], headers=headers)
-                else:
-                    resp = await client.get(p["url"], params=p["params"], headers=headers)
-                
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data:
-                        return {"success": True, "pattern": p, "raw_data": data}
-            except Exception as e:
-                errors.append(str(e))
-                
-    return {"success": False, "errors": errors, "status": "all_patterns_failed"}
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--single-process"]
+        )
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
 
+        async def handle_response(response):
+            nonlocal captured_data, captured_api_url
+            if "catchcorner" in response.url and response.request.method in ["GET", "POST"]:
+                try:
+                    data = await response.json()
+                    json_str = json.dumps(data)
+                    # Identify the correct API payload by checking for ice slot keys
+                    if "price" in json_str and "startTime" in json_str:
+                        captured_api_url = response.url
+                        captured_data = data
+                except:
+                    pass
+
+        page.on("response", handle_response)
+        
+        try:
+            await page.goto(target_url, wait_until="networkidle", timeout=15000)
+        except Exception:
+            pass 
+            
+        await browser.close()
+        
+        if captured_api_url:
+            return {
+                "success": True, 
+                "discovered_api_url": captured_api_url, 
+                "raw_data": captured_data
+            }
+        else:
+            return {"success": False, "error": "Could not intercept CatchCorner API request."}
