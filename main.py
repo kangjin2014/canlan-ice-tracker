@@ -1,82 +1,42 @@
 import httpx
-import json
-import re
-from datetime import datetime
-from fastapi import FastAPI, Query
-from typing import Optional
+from datetime import datetime, timedelta
+from fastapi import FastAPI
 
-app = FastAPI(title="Canlan Oakville Ice Tracker")
-
-# Recursive function to hunt down ice slots no matter where they are hidden in the JSON
-def find_slots(data):
-    slots = []
-    if isinstance(data, dict):
-        # CatchCorner slot objects always contain these keys
-        if "startTime" in data and ("price" in data or "totalPrice" in data):
-            slots.append(data)
-        else:
-            for value in data.values():
-                slots.extend(find_slots(value))
-    elif isinstance(data, list):
-        for item in data:
-            slots.extend(find_slots(item))
-    return slots
+app = FastAPI()
 
 @app.get("/")
 def read_root():
-    return {"status": "ok", "service": "Canlan Oakville Ice Tracker"}
+    return {"status": "ok"}
 
 @app.get("/api/v1/ice/last-minute")
-async def get_last_minute_ice(
-    max_price: Optional[float] = Query(200.0, description="Max target price")
-):
-    # The actual facility ID and SEO name used by CatchCorner
-    target_url = "https://www.catchcorner.com/facility-page/embedded/rental/canlan-sports-oakville"
+async def get_last_minute_ice(days_ahead: int = 3):
+    start = datetime.now().strftime("%Y-%m-%d")
+    end = (datetime.now() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml"
-    }
+    patterns = [
+        {"method": "POST", "url": "https://www.catchcorner.com/api/client/listing/search", "json": {"sportId": 1, "facilitySeoName": "canlansportsoakville", "startDate": start, "endDate": end}, "params": None},
+        {"method": "POST", "url": "https://www.catchcorner.com/api/client/listing/search", "json": {"sportId": 1, "facilitySeoName": "canlan-sports-oakville", "startDate": start, "endDate": end}, "params": None},
+        {"method": "GET", "url": "https://www.catchcorner.com/api/client/facility/rental/canlansportsoakville", "json": None, "params": {"sportId": 1, "startDate": start, "endDate": end}},
+        {"method": "GET", "url": "https://www.catchcorner.com/api/client/facility/rental/canlan-sports-oakville", "json": None, "params": {"sportId": 1, "startDate": start, "endDate": end}},
+        {"method": "GET", "url": "https://www.catchcorner.com/api/client/facility/rental/canlan-sports-oakville-entripy-centre", "json": None, "params": {"sportId": 1}}
+    ]
 
-    try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            response = await client.get(target_url, headers=headers)
-            response.raise_for_status()
-            
-            # CatchCorner is a Next.js app; the raw schedule data is baked into the HTML page state
-            match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', response.text)
-            
-            if not match:
-                return {"error": "Could not extract internal data state from Canlan Oakville page."}
+    errors = []
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        for p in patterns:
+            try:
+                if p["method"] == "POST":
+                    resp = await client.post(p["url"], json=p["json"], headers=headers)
+                else:
+                    resp = await client.get(p["url"], params=p["params"], headers=headers)
                 
-            raw_json_state = json.loads(match.group(1))
-            
-            # Extract all valid time slots from the unstructured JSON
-            all_slots = find_slots(raw_json_state)
-            
-            deals = []
-            for item in all_slots:
-                price = float(item.get("price", item.get("totalPrice", 9999)))
-                if price <= max_price:
-                    deals.append({
-                        "facility": "Entripy Centre - Canlan Oakville",
-                        "rink": item.get("spaceName", item.get("subFacilityName", "Ice Rink")),
-                        "start_time": item.get("startTime"),
-                        "end_time": item.get("endTime"),
-                        "price": price,
-                        "booking_url": target_url
-                    })
-            
-            # Deduplicate (Next.js state often contains duplicate identical objects)
-            unique_deals = [dict(t) for t in {tuple(d.items()) for d in deals}]
-            # Sort chronologically
-            sorted_deals = sorted(unique_deals, key=lambda x: x.get("start_time", ""))
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data:
+                        return {"success": True, "pattern": p, "raw_data": data}
+            except Exception as e:
+                errors.append(str(e))
+                
+    return {"success": False, "errors": errors, "status": "all_patterns_failed"}
 
-            return {
-                "timestamp": datetime.now().isoformat(),
-                "total_deals_found": len(sorted_deals),
-                "deals": sorted_deals
-            }
-
-    except Exception as e:
-        return {"error": str(e), "status": "failed_to_fetch_data"}
