@@ -1,0 +1,17 @@
+{
+  "name": "canlan-ice-tracker",
+  "version": "1.0.0",
+  "description": "Watches CatchCorner's Canlan Sports Oakville rental page for cheap ice slots and emails alerts.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "debug:capture": "node debug/inspect.js"
+  },
+  "dependencies": {
+    "playwright": "^1.47.0",
+    "ioredis": "^5.4.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
